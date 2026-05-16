@@ -22,12 +22,12 @@ class SicenetService() {
 
     private val BASE_URL = "http://sicenet.surguanajuato.tecnm.mx/ws/wsalumnos.asmx"
 
-    // Configuración para leer el JSON del Kárdex
     private val jsonConfig = Json {
         ignoreUnknownKeys = true
         coerceInputValues = true
     }
 
+    // --- 1. MODULO DE AUTENTICACIÓN ---
     suspend fun login(matricula: String, contrasenia: String): Boolean {
         val matriculaLimpia = matricula.trim().uppercase()
         val contraseniaEscapada = contrasenia
@@ -62,7 +62,7 @@ class SicenetService() {
         }
     }
 
-    // 1. Esta función obtiene el XML crudo
+    // --- 2. MODULO DE KÁRDEX ---
     suspend fun getKardexRaw(matricula: String, contrasenia: String): String {
         val soapBody = """
             <?xml version="1.0" encoding="utf-8"?>
@@ -87,7 +87,6 @@ class SicenetService() {
         } catch (e: Exception) { "" }
     }
 
-    // 2. Esta función CONVIERTE el XML en una Lista de Materias
     suspend fun getKardexParsed(matricula: String, contrasenia: String): List<MateriaKardex> {
         val rawXml = getKardexRaw(matricula, contrasenia)
         return try {
@@ -101,18 +100,19 @@ class SicenetService() {
             emptyList()
         }
     }
-    // 1. Obtiene el XML crudo de la carga
+
+    // --- 3. MODULO DE CARGA ACADÉMICA ---
     suspend fun getCargaRaw(): String {
         val soapBody = """
-        <?xml version="1.0" encoding="utf-8"?>
-        <soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
-                       xmlns:xsd="http://www.w3.org/2001/XMLSchema" 
-                       xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
-          <soap:Body>
-            <getCargaAcademicaByAlumno xmlns="http://tempuri.org/" />
-          </soap:Body>
-        </soap:Envelope>
-    """.trimIndent()
+            <?xml version="1.0" encoding="utf-8"?>
+            <soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+                           xmlns:xsd="http://www.w3.org/2001/XMLSchema" 
+                           xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+              <soap:Body>
+                <getCargaAcademicaByAlumno xmlns="http://tempuri.org/" />
+              </soap:Body>
+            </soap:Envelope>
+        """.trimIndent()
 
         return try {
             val response = client.post(BASE_URL) {
@@ -124,21 +124,61 @@ class SicenetService() {
         } catch (e: Exception) { "" }
     }
 
-    // 2. Convierte el XML en una Lista de Materias de Carga
     @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
-         suspend fun getCargaParsed(): List<MateriaCarga> {
+    suspend fun getCargaParsed(): List<MateriaCarga> {
         val rawXml = getCargaRaw()
         return try {
             val jsonString = rawXml
                 .substringAfter("<getCargaAcademicaByAlumnoResult>")
                 .substringBefore("</getCargaAcademicaByAlumnoResult>")
 
-            // FÍJATE AQUÍ: Ahora pedimos List<MateriaCarga> directamente, no CargaResponse
-            val lista = jsonConfig.decodeFromString<List<MateriaCarga>>(jsonString)
-
-            lista
+            jsonConfig.decodeFromString<List<MateriaCarga>>(jsonString)
         } catch (e: Exception) {
             println("DEBUG_CARGA_ERROR_PARSE: ${e.message}")
+            emptyList()
+        }
+    }
+
+    // --- 4. MODULO DE CALIFICACIONES FINALES ---
+    suspend fun getCalificacionesRaw(): String {
+        val bytModEducativo = 1
+        val soapBody = """
+            <?xml version="1.0" encoding="utf-8"?>
+            <soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+                           xmlns:xsd="http://www.w3.org/2001/XMLSchema" 
+                           xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+              <soap:Body>
+                <getAllCalifFinalByAlumnos xmlns="http://tempuri.org/">
+                  <bytModEducativo>$bytModEducativo</bytModEducativo>
+                </getAllCalifFinalByAlumnos>
+              </soap:Body>
+            </soap:Envelope>
+        """.trimIndent()
+
+        return try {
+            val response = client.post(BASE_URL) {
+                header("Content-Type", "text/xml; charset=utf-8")
+                header("SOAPAction", "\"http://tempuri.org/getAllCalifFinalByAlumnos\"")
+                header("Host", "sicenet.surguanajuato.tecnm.mx")
+                setBody(soapBody)
+            }
+            response.bodyAsText()
+        } catch (e: Exception) { "" }
+    }
+
+    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
+    suspend fun getCalificacionesParsed(): List<CalificacionFinal> {
+        val rawXml = getCalificacionesRaw()
+        println("DEBUG_CALIF_XML_BRUTO: $rawXml") // Dejamos esto por si acaso
+
+        return try {
+            val jsonString = rawXml
+                .substringAfter("<getAllCalifFinalByAlumnosResult>")
+                .substringBefore("</getAllCalifFinalByAlumnosResult>")
+
+            jsonConfig.decodeFromString<List<CalificacionFinal>>(jsonString)
+        } catch (e: Exception) {
+            println("DEBUG_CALIF_ERROR_PARSE: ${e.message}")
             emptyList()
         }
     }

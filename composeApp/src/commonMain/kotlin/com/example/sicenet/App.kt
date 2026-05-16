@@ -11,6 +11,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import com.example.sicenet.data.CalificacionFinal
 import com.example.sicenet.data.MateriaCarga
 import com.example.sicenet.data.MateriaKardex
 import com.example.sicenet.data.SicenetService
@@ -19,7 +20,7 @@ import kotlinx.coroutines.launch
 
 // Definimos las pantallas posibles
 enum class Pantalla {
-    LOGIN, KARDEX, CARGA
+    LOGIN, KARDEX, CARGA, CALIFICACIONES
 }
 
 @Composable
@@ -32,6 +33,7 @@ fun App(driverFactory: DriverFactory) {
         var pantallaActual by remember { mutableStateOf(Pantalla.LOGIN) }
         var listaMaterias by remember { mutableStateOf<List<MateriaKardex>>(emptyList()) }
         var listaCarga by remember { mutableStateOf<List<MateriaCarga>>(emptyList()) }
+        var listaCalificaciones by remember { mutableStateOf<List<CalificacionFinal>>(emptyList()) }
 
         // Estados de Login
         var numControl by remember { mutableStateOf("") }
@@ -56,11 +58,18 @@ fun App(driverFactory: DriverFactory) {
                             icon = { Icon(Icons.Default.List, null) }
                         )
                         NavigationBarItem(
+                            selected = pantallaActual == Pantalla.CALIFICACIONES,
+                            onClick = { pantallaActual = Pantalla.CALIFICACIONES },
+                            label = { Text("Finales") },
+                            icon = { Icon(Icons.Default.Star, null) }
+                        )
+                        NavigationBarItem(
                             selected = false,
                             onClick = {
                                 pantallaActual = Pantalla.LOGIN
                                 listaMaterias = emptyList()
                                 listaCarga = emptyList()
+                                listaCalificaciones = emptyList()
                                 mensaje = ""
                             },
                             label = { Text("Salir") },
@@ -87,6 +96,10 @@ fun App(driverFactory: DriverFactory) {
                                             mensaje = "Cargando datos..."
                                             listaMaterias = sicenetService.getKardexParsed(numControl, nip)
                                             listaCarga = sicenetService.getCargaParsed()
+
+                                            // 🚀 CORRECCIÓN: Se ejecuta dentro del hilo asíncrono tras el login
+                                            listaCalificaciones = sicenetService.getCalificacionesParsed()
+
                                             pantallaActual = Pantalla.CARGA
                                         } else {
                                             mensaje = "Error: Datos incorrectos"
@@ -102,13 +115,14 @@ fun App(driverFactory: DriverFactory) {
                     }
                     Pantalla.KARDEX -> KardexScreen(listaMaterias)
                     Pantalla.CARGA -> CargaScreen(listaCarga)
+                    Pantalla.CALIFICACIONES -> CalificacionesScreen(listaCalificaciones)
                 }
             }
         }
     }
 }
 
-// --- VISTAS SEPARADAS PARA NO TENER ERRORES ---
+// --- VISTAS SEPARADAS ---
 
 @Composable
 fun LoginScreen(
@@ -159,7 +173,6 @@ fun KardexScreen(materias: List<MateriaKardex>) {
     }
 }
 
-
 @Composable
 fun CargaScreen(materias: List<MateriaCarga>) {
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
@@ -169,20 +182,52 @@ fun CargaScreen(materias: List<MateriaCarga>) {
             items(materias) { materia ->
                 Card(modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        // CAMBIA AQUÍ: de materia.Materia a materia.materia
                         Text(materia.materia, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
-
-                        // CAMBIA AQUÍ: de materia.Docente a materia.docente
                         Text("Docente: ${materia.docente ?: "Pendiente"}", style = MaterialTheme.typography.bodyMedium)
-
                         HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            // CAMBIA AQUÍ: de materia.Horario a materia.horario
-                            Text(" ${materia.horario ?: "N/A"}", style = MaterialTheme.typography.bodySmall)
+                            Text("  ${materia.horario ?: "N/A"}", style = MaterialTheme.typography.bodySmall)
+                            Text("  Aula: ${materia.aula ?: "N/A"}", style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
 
-                            // CAMBIA AQUÍ: de materia.Aula a materia.aula
-                            Text(" Aula: ${materia.aula ?: "N/A"}", style = MaterialTheme.typography.bodySmall)
+// 🚀 CORRECCIÓN: Separada limpiamente fuera de CargaScreen
+@Composable
+fun CalificacionesScreen(calificaciones: List<CalificacionFinal>) {
+    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+        Text("Calificaciones Finales", style = MaterialTheme.typography.headlineSmall)
+        Spacer(modifier = Modifier.height(16.dp))
+
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(calificaciones) { calif ->
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        modifier = Modifier.padding(16.dp).fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(calif.materia, style = MaterialTheme.typography.titleMedium)
+                            // CAMBIADO: calif.acred y calif.grupo
+                            Text("Acreditación: ${calif.acred ?: "N/A"} | Grupo: ${calif.grupo ?: ""}", style = MaterialTheme.typography.bodySmall)
+                        }
+
+                        // CAMBIADO: calif.calif y corregido el MaterialTheme.colorScheme
+                        Surface(
+                            color = if (calif.calif >= 70) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                            shape = MaterialTheme.shapes.small
+                        ) {
+                            Text(
+                                text = calif.calif.toString(),
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                color = MaterialTheme.colorScheme.onPrimary,
+                                style = MaterialTheme.typography.titleMedium
+                            )
                         }
                     }
                 }

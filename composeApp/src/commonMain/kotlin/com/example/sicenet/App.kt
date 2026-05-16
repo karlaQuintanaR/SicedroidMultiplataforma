@@ -12,12 +12,13 @@ import androidx.compose.ui.unit.dp
 import com.example.sicenet.data.CalificacionFinal
 import com.example.sicenet.data.MateriaCarga
 import com.example.sicenet.data.MateriaKardex
+import com.example.sicenet.data.MateriaUnidad
 import com.example.sicenet.data.SicenetService
 import com.example.sicenet.database.DriverFactory
 import kotlinx.coroutines.launch
 
 enum class Pantalla {
-    LOGIN, KARDEX, CARGA, CALIFICACIONES
+    LOGIN, KARDEX, CARGA, CALIFICACIONES, UNIDADES
 }
 
 @Composable
@@ -30,7 +31,7 @@ fun App(driverFactory: DriverFactory) {
         var listaMaterias by remember { mutableStateOf<List<MateriaKardex>>(emptyList()) }
         var listaCarga by remember { mutableStateOf<List<MateriaCarga>>(emptyList()) }
         var listaCalificaciones by remember { mutableStateOf<List<CalificacionFinal>>(emptyList()) }
-
+        var listaUnidades by remember { mutableStateOf<List<MateriaUnidad>>(emptyList()) }
         var numControl by remember { mutableStateOf("") }
         var nip by remember { mutableStateOf("") }
         var mensaje by remember { mutableStateOf("") }
@@ -44,7 +45,7 @@ fun App(driverFactory: DriverFactory) {
                             selected = pantallaActual == Pantalla.CARGA,
                             onClick = { pantallaActual = Pantalla.CARGA },
                             label = { Text("Horario") },
-                            icon = { Text("🕒") } // Texto simple para evitar fallas de iconos nativos en iOS
+                            icon = { Text("🕒") }
                         )
                         NavigationBarItem(
                             selected = pantallaActual == Pantalla.KARDEX,
@@ -59,12 +60,19 @@ fun App(driverFactory: DriverFactory) {
                             icon = { Text("⭐") }
                         )
                         NavigationBarItem(
+                            selected = pantallaActual == Pantalla.UNIDADES,
+                            onClick = { pantallaActual = Pantalla.UNIDADES },
+                            label = { Text("Unidades") },
+                            icon = { Text("📊") }
+                        )
+                        NavigationBarItem(
                             selected = false,
                             onClick = {
                                 pantallaActual = Pantalla.LOGIN
                                 listaMaterias = emptyList()
                                 listaCarga = emptyList()
                                 listaCalificaciones = emptyList()
+                                listaUnidades = emptyList()
                                 mensaje = ""
                             },
                             label = { Text("Salir") },
@@ -92,6 +100,7 @@ fun App(driverFactory: DriverFactory) {
                                             listaMaterias = sicenetService.getKardexParsed(numControl, nip)
                                             listaCarga = sicenetService.getCargaParsed()
                                             listaCalificaciones = sicenetService.getCalificacionesParsed()
+                                            listaUnidades = sicenetService.getCalifUnidadesByAlumnoParsed()
                                             pantallaActual = Pantalla.CARGA
                                         } else {
                                             mensaje = "Error: Datos incorrectos"
@@ -108,6 +117,7 @@ fun App(driverFactory: DriverFactory) {
                     Pantalla.KARDEX -> KardexScreen(listaMaterias)
                     Pantalla.CARGA -> CargaScreen(listaCarga)
                     Pantalla.CALIFICACIONES -> CalificacionesScreen(listaCalificaciones)
+                    Pantalla.UNIDADES -> UnidadesScreen(listaUnidades)
                 }
             }
         }
@@ -179,8 +189,9 @@ fun CargaScreen(materias: List<MateriaCarga>) {
                         Text("Docente: ${materia.docente ?: "Pendiente"}", style = MaterialTheme.typography.bodyMedium)
                         Spacer(modifier = Modifier.height(8.dp))
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text(" ${materia.horario ?: "N/A"}", style = MaterialTheme.typography.bodySmall)
-                            Text(" Aula: ${materia.aula ?: "N/A"}", style = MaterialTheme.typography.bodySmall)
+// Así debe quedar la línea corregida:
+                            Text("🕒 ${materia.horario ?: "N/A"}", modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
+                            Text("📍 Aula: ${materia.aula ?: "N/A"}", style = MaterialTheme.typography.bodySmall)
                         }
                     }
                 }
@@ -204,7 +215,8 @@ fun CalificacionesScreen(calificaciones: List<CalificacionFinal>) {
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(calif.materia, style = MaterialTheme.typography.titleMedium)
-                            Text("Acreditación: ${calif.acred ?: "N/A"} | Grupo: ${calif.grupo ?: ""}", style = MaterialTheme.typography.bodySmall)                        }
+                            Text("Acreditación: ${calif.acred ?: "N/A"} | Grupo: ${calif.grupo ?: ""}", style = MaterialTheme.typography.bodySmall)
+                        }
                         Surface(
                             color = if (calif.calif >= 70) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
                             shape = MaterialTheme.shapes.small
@@ -215,6 +227,61 @@ fun CalificacionesScreen(calificaciones: List<CalificacionFinal>) {
                                 color = MaterialTheme.colorScheme.onPrimary,
                                 style = MaterialTheme.typography.titleMedium
                             )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun UnidadesScreen(materiasUnidades: List<MateriaUnidad>) {
+    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+        Text("Calificaciones por Unidad", style = MaterialTheme.typography.headlineSmall)
+        Spacer(modifier = Modifier.height(16.dp))
+
+        if (materiasUnidades.isEmpty()) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text("No hay unidades capturadas o cargando...", style = MaterialTheme.typography.bodyMedium)
+            }
+        } else {
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                items(materiasUnidades) { item ->
+                    Card(modifier = Modifier.fillMaxWidth()) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            // Imprimimos el nombre de la materia
+                            Text(item.Materia, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            // Fila con scroll horizontal automático por si son muchas unidades
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                // Mapeamos las calificaciones reales capturadas del servidor
+                                val calificaciones = listOfNotNull(
+                                    item.C1, item.C2, item.C3, item.C4, item.C5,
+                                    item.C6, item.C7, item.C8, item.C9, item.C10
+                                )
+
+                                calificaciones.forEachIndexed { index, calif ->
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                        Text("U${index + 1}", style = MaterialTheme.typography.bodySmall)
+                                        Surface(
+                                            color = MaterialTheme.colorScheme.secondaryContainer,
+                                            shape = MaterialTheme.shapes.small,
+                                            modifier = Modifier.padding(top = 4.dp)
+                                        ) {
+                                            Text(
+                                                text = calif,
+                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                                style = MaterialTheme.typography.bodyMedium
+                                            )
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }

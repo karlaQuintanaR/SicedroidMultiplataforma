@@ -2,6 +2,7 @@ package com.example.sicenet.data
 
 import kotlinx.serialization.json.Json
 import io.ktor.client.*
+import io.ktor.client.call.body
 import io.ktor.client.plugins.HttpRedirect
 import io.ktor.client.plugins.logging.*
 import io.ktor.client.request.*
@@ -20,7 +21,8 @@ class SicenetService() {
         }
     }
 
-    private val BASE_URL = "http://sicenet.surguanajuato.tecnm.mx/ws/wsalumnos.asmx"
+    // 🚀 Unificamos a HTTPS si el servidor lo requiere, o mantenemos la ruta fija compartida
+    private val BASE_URL = "https://sicenet.surguanajuato.tecnm.mx/ws/wsalumnos.asmx"
 
     private val jsonConfig = Json {
         ignoreUnknownKeys = true
@@ -169,7 +171,7 @@ class SicenetService() {
     @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
     suspend fun getCalificacionesParsed(): List<CalificacionFinal> {
         val rawXml = getCalificacionesRaw()
-        println("DEBUG_CALIF_XML_BRUTO: $rawXml") // Dejamos esto por si acaso
+        println("DEBUG_CALIF_XML_BRUTO: $rawXml")
 
         return try {
             val jsonString = rawXml
@@ -179,6 +181,49 @@ class SicenetService() {
             jsonConfig.decodeFromString<List<CalificacionFinal>>(jsonString)
         } catch (e: Exception) {
             println("DEBUG_CALIF_ERROR_PARSE: ${e.message}")
+            emptyList()
+        }
+    }
+
+
+    // --- 5. MODULO DE CALIFICACIONES POR UNIDAD (VERSION DEFINITIVA) ---
+    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
+    suspend fun getCalifUnidadesByAlumnoParsed(): List<MateriaUnidad> {
+        val soapEnvelope = """
+            <?xml version="1.0" encoding="utf-8"?>
+            <soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+                           xmlns:xsd="http://www.w3.org/2001/XMLSchema" 
+                           xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+              <soap:Body>
+                <getCalifUnidadesByAlumno xmlns="http://tempuri.org/" />
+              </soap:Body>
+            </soap:Envelope>
+        """.trimIndent()
+
+        return try {
+            val response: String = client.post(BASE_URL) {
+                header("Content-Type", "text/xml; charset=utf-8")
+                header("SOAPAction", "\"http://tempuri.org/getCalifUnidadesByAlumno\"")
+                setBody(soapEnvelope)
+            }.body()
+
+            val jsonStart = response.indexOf("<getCalifUnidadesByAlumnoResult>") + "<getCalifUnidadesByAlumnoResult>".length
+            val jsonEnd = response.indexOf("</getCalifUnidadesByAlumnoResult>")
+
+            if (jsonStart >= 0 && jsonEnd > jsonStart) {
+                val jsonRaw = response.substring(jsonStart, jsonEnd)
+                    .replace("&lt;", "<")
+                    .replace("&gt;", ">")
+                    .replace("&amp;", "&")
+                    .trim()
+
+                // Decodificamos usando el modelo real de objetos
+                jsonConfig.decodeFromString<List<MateriaUnidad>>(jsonRaw)
+            } else {
+                emptyList()
+            }
+        } catch (e: Exception) {
+            println("DEBUG_UNIDADES_ERROR_PARSE: ${e.message}")
             emptyList()
         }
     }

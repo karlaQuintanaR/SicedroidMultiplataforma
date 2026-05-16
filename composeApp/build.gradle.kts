@@ -15,7 +15,6 @@ kotlin {
         compilerOptions { jvmTarget.set(JvmTarget.JVM_11) }
     }
 
-    // 🚀 CAMBIO AQUÍ: Quita el "desktop" y déjalo solo como jvm()
     jvm {
         compilations.all {
             compilerOptions.configure {
@@ -68,6 +67,13 @@ kotlin {
                 // 🚀 SQLDelight desactivado para evitar el error interno del compilador en PC
                 // implementation(libs.sqldelight.jvm.driver)
                 implementation("io.ktor:ktor-client-cio:2.3.11")
+            }
+        }
+
+        // 🚀 CORREGIDO: commonTest ahora está en el lugar correcto con sus llaves bien cerradas
+        val commonTest by getting {
+            dependencies {
+                implementation(kotlin("test"))
             }
         }
     } // <-- Aquí se cierra sourceSets

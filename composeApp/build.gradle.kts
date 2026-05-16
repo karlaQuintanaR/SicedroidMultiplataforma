@@ -7,7 +7,7 @@ plugins {
     alias(libs.plugins.composeMultiplatform)
     alias(libs.plugins.composeCompiler)
     alias(libs.plugins.sqlDelight)
-    kotlin("plugin.serialization") version "2.0.0"
+    kotlin("plugin.serialization") version "1.9.23"
 }
 
 kotlin {
@@ -35,6 +35,7 @@ kotlin {
                 implementation("io.ktor:ktor-client-logging:2.3.11")
                 implementation("io.ktor:ktor-client-content-negotiation:2.3.11")
                 implementation("io.ktor:ktor-serialization-kotlinx-json:2.3.11")
+                implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.2")
             }
         }
 
@@ -78,7 +79,6 @@ sqldelight {
     databases {
         create("SicenetDb") {
             packageName.set("com.example.sicenet.database")
-            generateAsync.set(false) // <--- Agrega esto para evitar el error del compilador
         }
     }
 }

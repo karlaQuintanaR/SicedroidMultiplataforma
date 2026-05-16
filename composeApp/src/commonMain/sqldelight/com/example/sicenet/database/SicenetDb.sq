@@ -1,22 +1,20 @@
--- Tabla para los datos del alumno
 CREATE TABLE StudentEntity (
     controlNumber TEXT NOT NULL PRIMARY KEY,
     fullName TEXT NOT NULL,
     career TEXT NOT NULL,
-    semester INTEGER NOT NULL -- Quitamos el 'AS Int'
+    semester INTEGER NOT NULL
 );
 
--- Tabla para las materias
 CREATE TABLE SubjectEntity (
     id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
-    grade REAL NOT NULL,      -- Quitamos el 'AS Double'
+    grade REAL NOT NULL,
     period TEXT NOT NULL,
     studentId TEXT NOT NULL,
     FOREIGN KEY (studentId) REFERENCES StudentEntity(controlNumber) ON DELETE CASCADE
 );
 
--- CONSULTAS
+-- Consultas para el Alumno
 insertStudent:
 INSERT OR REPLACE INTO StudentEntity(controlNumber, fullName, career, semester)
 VALUES (?, ?, ?, ?);
@@ -24,6 +22,7 @@ VALUES (?, ?, ?, ?);
 getStudent:
 SELECT * FROM StudentEntity LIMIT 1;
 
+-- Consultas para Materias
 insertSubject:
 INSERT INTO SubjectEntity(name, grade, period, studentId)
 VALUES (?, ?, ?, ?);
@@ -31,5 +30,6 @@ VALUES (?, ?, ?, ?);
 getSubjectsByStudent:
 SELECT * FROM SubjectEntity WHERE studentId = ?;
 
+-- Consultas de limpieza
 deleteAllData:
 DELETE FROM StudentEntity;

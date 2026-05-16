@@ -15,7 +15,22 @@ kotlin {
         compilerOptions { jvmTarget.set(JvmTarget.JVM_11) }
     }
 
-    jvm("desktop") // Asegúrate de que se llame "desktop"
+    // 🚀 CAMBIO AQUÍ: Quita el "desktop" y déjalo solo como jvm()
+    jvm {
+        compilations.all {
+            compilerOptions.configure {
+                freeCompilerArgs.add("-Xuse-k2=false")
+            }
+        }
+    }
+
+    targets.all {
+        compilations.all {
+            compilerOptions.configure {
+                freeCompilerArgs.add("-Xuse-k2=false")
+            }
+        }
+    }
 
     sourceSets {
         val commonMain by getting {
@@ -47,15 +62,16 @@ kotlin {
             }
         }
 
-        val desktopMain by getting {
+        val jvmMain by getting {
             dependencies {
                 implementation(compose.desktop.currentOs)
-                implementation(libs.sqldelight.jvm.driver)
+                // 🚀 SQLDelight desactivado para evitar el error interno del compilador en PC
+                // implementation(libs.sqldelight.jvm.driver)
                 implementation("io.ktor:ktor-client-cio:2.3.11")
             }
         }
-    }
-}
+    } // <-- Aquí se cierra sourceSets
+} // <-- Aquí se cierra todo el bloque kotlin
 
 android {
     namespace = "com.example.sicenet"
@@ -84,8 +100,8 @@ sqldelight {
 }
 
 compose.desktop {
-    application { // <--- ESTA LLAVE ES INDISPENSABLE
-        mainClass = "com.example.sicenet.MainKt" // Pon la ruta completa
+    application {
+        mainClass = "com.example.sicenet.MainKt"
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
             packageName = "com.example.sicenet"

@@ -3,8 +3,6 @@ package com.example.sicenet
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -18,7 +16,6 @@ import com.example.sicenet.data.SicenetService
 import com.example.sicenet.database.DriverFactory
 import kotlinx.coroutines.launch
 
-// Definimos las pantallas posibles
 enum class Pantalla {
     LOGIN, KARDEX, CARGA, CALIFICACIONES
 }
@@ -29,13 +26,11 @@ fun App(driverFactory: DriverFactory) {
         val scope = rememberCoroutineScope()
         val sicenetService = remember { SicenetService() }
 
-        // Estados de navegación y datos
         var pantallaActual by remember { mutableStateOf(Pantalla.LOGIN) }
         var listaMaterias by remember { mutableStateOf<List<MateriaKardex>>(emptyList()) }
         var listaCarga by remember { mutableStateOf<List<MateriaCarga>>(emptyList()) }
         var listaCalificaciones by remember { mutableStateOf<List<CalificacionFinal>>(emptyList()) }
 
-        // Estados de Login
         var numControl by remember { mutableStateOf("") }
         var nip by remember { mutableStateOf("") }
         var mensaje by remember { mutableStateOf("") }
@@ -49,19 +44,19 @@ fun App(driverFactory: DriverFactory) {
                             selected = pantallaActual == Pantalla.CARGA,
                             onClick = { pantallaActual = Pantalla.CARGA },
                             label = { Text("Horario") },
-                            icon = { Icon(Icons.Default.DateRange, null) }
+                            icon = { Text("🕒") } // Texto simple para evitar fallas de iconos nativos en iOS
                         )
                         NavigationBarItem(
                             selected = pantallaActual == Pantalla.KARDEX,
                             onClick = { pantallaActual = Pantalla.KARDEX },
                             label = { Text("Kárdex") },
-                            icon = { Icon(Icons.Default.List, null) }
+                            icon = { Text("📋") }
                         )
                         NavigationBarItem(
                             selected = pantallaActual == Pantalla.CALIFICACIONES,
                             onClick = { pantallaActual = Pantalla.CALIFICACIONES },
                             label = { Text("Finales") },
-                            icon = { Icon(Icons.Default.Star, null) }
+                            icon = { Text("⭐") }
                         )
                         NavigationBarItem(
                             selected = false,
@@ -73,7 +68,7 @@ fun App(driverFactory: DriverFactory) {
                                 mensaje = ""
                             },
                             label = { Text("Salir") },
-                            icon = { Icon(Icons.Default.ExitToApp, null) }
+                            icon = { Text("🚪") }
                         )
                     }
                 }
@@ -96,10 +91,7 @@ fun App(driverFactory: DriverFactory) {
                                             mensaje = "Cargando datos..."
                                             listaMaterias = sicenetService.getKardexParsed(numControl, nip)
                                             listaCarga = sicenetService.getCargaParsed()
-
-                                            // 🚀 CORRECCIÓN: Se ejecuta dentro del hilo asíncrono tras el login
                                             listaCalificaciones = sicenetService.getCalificacionesParsed()
-
                                             pantallaActual = Pantalla.CARGA
                                         } else {
                                             mensaje = "Error: Datos incorrectos"
@@ -121,8 +113,6 @@ fun App(driverFactory: DriverFactory) {
         }
     }
 }
-
-// --- VISTAS SEPARADAS ---
 
 @Composable
 fun LoginScreen(
@@ -163,7 +153,10 @@ fun KardexScreen(materias: List<MateriaKardex>) {
                             Text(materia.Materia, style = MaterialTheme.typography.titleSmall)
                             Text("Clave: ${materia.ClvOfiMat}", style = MaterialTheme.typography.bodySmall)
                         }
-                        Surface(color = if (materia.Calif >= 70) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error, shape = MaterialTheme.shapes.small) {
+                        Surface(
+                            color = if (materia.Calif >= 70) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                            shape = MaterialTheme.shapes.small
+                        ) {
                             Text(materia.Calif.toString(), modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp), color = MaterialTheme.colorScheme.onPrimary)
                         }
                     }
@@ -184,10 +177,10 @@ fun CargaScreen(materias: List<MateriaCarga>) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Text(materia.materia, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
                         Text("Docente: ${materia.docente ?: "Pendiente"}", style = MaterialTheme.typography.bodyMedium)
-                        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                        Spacer(modifier = Modifier.height(8.dp))
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text("  ${materia.horario ?: "N/A"}", style = MaterialTheme.typography.bodySmall)
-                            Text("  Aula: ${materia.aula ?: "N/A"}", style = MaterialTheme.typography.bodySmall)
+                            Text(" ${materia.horario ?: "N/A"}", style = MaterialTheme.typography.bodySmall)
+                            Text(" Aula: ${materia.aula ?: "N/A"}", style = MaterialTheme.typography.bodySmall)
                         }
                     }
                 }
@@ -196,13 +189,11 @@ fun CargaScreen(materias: List<MateriaCarga>) {
     }
 }
 
-// 🚀 CORRECCIÓN: Separada limpiamente fuera de CargaScreen
 @Composable
 fun CalificacionesScreen(calificaciones: List<CalificacionFinal>) {
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         Text("Calificaciones Finales", style = MaterialTheme.typography.headlineSmall)
         Spacer(modifier = Modifier.height(16.dp))
-
         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(calificaciones) { calif ->
                 Card(modifier = Modifier.fillMaxWidth()) {
@@ -213,11 +204,7 @@ fun CalificacionesScreen(calificaciones: List<CalificacionFinal>) {
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(calif.materia, style = MaterialTheme.typography.titleMedium)
-                            // CAMBIADO: calif.acred y calif.grupo
-                            Text("Acreditación: ${calif.acred ?: "N/A"} | Grupo: ${calif.grupo ?: ""}", style = MaterialTheme.typography.bodySmall)
-                        }
-
-                        // CAMBIADO: calif.calif y corregido el MaterialTheme.colorScheme
+                            Text("Acreditación: ${calif.acred ?: "N/A"} | Grupo: ${calif.grupo ?: ""}", style = MaterialTheme.typography.bodySmall)                        }
                         Surface(
                             color = if (calif.calif >= 70) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
                             shape = MaterialTheme.shapes.small

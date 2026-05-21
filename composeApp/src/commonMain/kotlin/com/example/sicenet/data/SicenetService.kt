@@ -21,7 +21,7 @@ class SicenetService() {
         }
     }
 
-    // 🚀 Unificamos a HTTPS si el servidor lo requiere, o mantenemos la ruta fija compartida
+
     private val BASE_URL = "https://sicenet.surguanajuato.tecnm.mx/ws/wsalumnos.asmx"
 
     private val jsonConfig = Json {

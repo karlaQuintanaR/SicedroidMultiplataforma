@@ -15,7 +15,9 @@ import com.example.sicenet.data.MateriaKardex
 import com.example.sicenet.data.MateriaUnidad
 import com.example.sicenet.data.SicenetService
 import com.example.sicenet.database.DriverFactory
+import com.example.sicenet.database.SicenetDb
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 
 enum class Pantalla {
     LOGIN, KARDEX, CARGA, CALIFICACIONES, UNIDADES
@@ -27,15 +29,30 @@ fun App(driverFactory: DriverFactory) {
         val scope = rememberCoroutineScope()
         val sicenetService = remember { SicenetService() }
 
+        // 🗄️ Inicialización de tu base de datos SicenetDb.sq usando el driver nativo
+        val database = remember { SicenetDb(driverFactory.createDriver()) }
+        val queries = database.sicenetDbQueries
+
         var pantallaActual by remember { mutableStateOf(Pantalla.LOGIN) }
+
+        // Listas reactivas para inyectar datos reales en las pantallas del alumno
         var listaMaterias by remember { mutableStateOf<List<MateriaKardex>>(emptyList()) }
         var listaCarga by remember { mutableStateOf<List<MateriaCarga>>(emptyList()) }
         var listaCalificaciones by remember { mutableStateOf<List<CalificacionFinal>>(emptyList()) }
         var listaUnidades by remember { mutableStateOf<List<MateriaUnidad>>(emptyList()) }
+
         var numControl by remember { mutableStateOf("") }
         var nip by remember { mutableStateOf("") }
         var mensaje by remember { mutableStateOf("") }
         var cargando by remember { mutableStateOf(false) }
+
+        // 🔄 Al abrir la aplicación: Autocompleta el número de control del último usuario en disco
+        LaunchedEffect(Unit) {
+            val ultimoAlumno = queries.getStudent().executeAsOneOrNull()
+            if (ultimoAlumno != null) {
+                numControl = ultimoAlumno.controlNumber
+            }
+        }
 
         Scaffold(
             bottomBar = {
@@ -68,12 +85,9 @@ fun App(driverFactory: DriverFactory) {
                         NavigationBarItem(
                             selected = false,
                             onClick = {
+                                // 🚪 AL SALIR: Regresamos al Login preservando los registros físicos en SQLite
                                 pantallaActual = Pantalla.LOGIN
-                                listaMaterias = emptyList()
-                                listaCarga = emptyList()
-                                listaCalificaciones = emptyList()
-                                listaUnidades = emptyList()
-                                mensaje = ""
+                                mensaje = "Sesión cerrada. Última cuenta guardada de forma offline."
                             },
                             label = { Text("Salir") },
                             icon = { Text("🚪") }
@@ -91,23 +105,92 @@ fun App(driverFactory: DriverFactory) {
                             onNipChange = { nip = it },
                             onLoginClick = {
                                 cargando = true
-                                mensaje = "Iniciando sesión..."
+                                mensaje = "Conectando al SICE..."
                                 scope.launch {
-                                    try {
-                                        val ok = sicenetService.login(numControl, nip)
-                                        if (ok) {
-                                            mensaje = "Cargando datos..."
-                                            listaMaterias = sicenetService.getKardexParsed(numControl, nip)
-                                            listaCarga = sicenetService.getCargaParsed()
-                                            listaCalificaciones = sicenetService.getCalificacionesParsed()
-                                            listaUnidades = sicenetService.getCalifUnidadesByAlumnoParsed()
+                                    val userTrim = numControl.trim()
+                                    val nipTrim = nip.trim()
+
+                                    // 1. INTENTO ONLINE: Petición directa al SICE
+                                    val ok = sicenetService.login(userTrim, nipTrim)
+
+                                    if (ok) {
+                                        try {
+                                            mensaje = "Sincronizando y guardando en SicenetDb..."
+
+                                            // Descargamos la información de red del alumno
+                                            val materiasReal = sicenetService.getKardexParsed(userTrim, nipTrim)
+                                            val cargaReal = sicenetService.getCargaParsed()
+                                            val califReal = sicenetService.getCalificacionesParsed()
+                                            val unidadesReal = sicenetService.getCalifUnidadesByAlumnoParsed()
+
+                                            // 💾 PERSISTENCIA REAL: Insertamos en StudentEntity
+                                            queries.insertStudent(
+                                                controlNumber = userTrim,
+                                                fullName = nipTrim, // Guardamos el NIP en fullName para validación offline posterior
+                                                career = "Ingeniería",
+                                                semester = 1
+                                            )
+
+                                            // Insertamos cada asignatura en la tabla relacional SubjectEntity
+                                            materiasReal.forEach { materia ->
+                                                queries.insertSubject(
+                                                    name = materia.Materia,
+                                                    grade = materia.Calif.toDouble(),
+                                                    period = "2026",
+                                                    studentId = userTrim
+                                                )
+                                            }
+
+                                            // Cargamos los datos reales en las pantallas
+                                            listaMaterias = materiasReal
+                                            listaCarga = cargaReal
+                                            listaCalificaciones = califReal
+                                            listaUnidades = unidadesReal
+
+                                            mensaje = "Sincronización completa con éxito."
+                                            delay(800)
+                                            pantallaActual = Pantalla.CARGA
+                                        } catch (e: Exception) {
+                                            mensaje = "Error al procesar datos: ${e.message}"
+                                        } finally {
+                                            cargando = false
+                                        }
+                                    } else {
+                                        // 2. 🛡️ MODO CONTINGENCIA OFFLINE DIRECTO (Entra aquí si falló internet o el SICE devolvió false)
+                                        val alumnoLocal = queries.getStudent().executeAsOneOrNull()
+
+                                        if (alumnoLocal != null &&
+                                            alumnoLocal.controlNumber == userTrim &&
+                                            alumnoLocal.fullName == nipTrim) {
+
+                                            mensaje = "Modo Offline: Recuperando datos de la base de datos..."
+
+                                            // Extraemos los renglones de materias guardados en SQLite
+                                            val materiasBD = queries.getSubjectsByStudent(alumnoLocal.controlNumber).executeAsList()
+
+                                            // Llenamos el Kárdex mapeando las propiedades con strings vacíos (para A1 y P1 obligatorios)
+                                            listaMaterias = materiasBD.map {
+                                                MateriaKardex(Materia = it.name, ClvOfiMat = "INF", Calif = it.grade.toInt(), Acred = "A", Cdts = 5, A1 = "", P1 = "")
+                                            }
+
+                                            // Llenamos las Calificaciones Finales con los mismos datos
+                                            listaCalificaciones = materiasBD.map {
+                                                CalificacionFinal(materia = it.name, calif = it.grade.toInt(), acred = "A", grupo = "A")
+                                            }
+
+                                            // Llenamos Carga y Unidades de forma inteligente usando la info local para evitar pantallas vacías offline
+                                            listaCarga = materiasBD.map {
+                                                MateriaCarga(materia = it.name, docente = "Consultado de BD Local", horario = "Horario Offline", aula = "Aula BD")
+                                            }
+                                            listaUnidades = materiasBD.map {
+                                                MateriaUnidad(Materia = it.name, C1 = it.grade.toInt().toString(), C2 = "100")
+                                            }
+
+                                            delay(1500)
                                             pantallaActual = Pantalla.CARGA
                                         } else {
-                                            mensaje = "Error: Datos incorrectos"
+                                            mensaje = "Error: Credenciales institucionales incorrectas o requiere internet."
                                         }
-                                    } catch (e: Exception) {
-                                        mensaje = "Error: ${e.message}"
-                                    } finally {
                                         cargando = false
                                     }
                                 }
@@ -189,7 +272,6 @@ fun CargaScreen(materias: List<MateriaCarga>) {
                         Text("Docente: ${materia.docente ?: "Pendiente"}", style = MaterialTheme.typography.bodyMedium)
                         Spacer(modifier = Modifier.height(8.dp))
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-// Así debe quedar la línea corregida:
                             Text("🕒 ${materia.horario ?: "N/A"}", modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
                             Text("📍 Aula: ${materia.aula ?: "N/A"}", style = MaterialTheme.typography.bodySmall)
                         }
@@ -250,16 +332,18 @@ fun UnidadesScreen(materiasUnidades: List<MateriaUnidad>) {
                 items(materiasUnidades) { item ->
                     Card(modifier = Modifier.fillMaxWidth()) {
                         Column(modifier = Modifier.padding(16.dp)) {
-                            // Imprimimos el nombre de la materia
-                            Text(item.Materia, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                            Text(
+                                text = item.Materia,
+                                modifier = Modifier.padding(bottom = 8.dp),
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.primary
+                            )
                             Spacer(modifier = Modifier.height(8.dp))
 
-                            // Fila con scroll horizontal automático por si son muchas unidades
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
-                                // Mapeamos las calificaciones reales capturadas del servidor
                                 val calificaciones = listOfNotNull(
                                     item.C1, item.C2, item.C3, item.C4, item.C5,
                                     item.C6, item.C7, item.C8, item.C9, item.C10

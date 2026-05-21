@@ -4,8 +4,7 @@ import app.cash.sqldelight.db.SqlDriver
 
 actual class DriverFactory {
     actual fun createDriver(): SqlDriver {
-        // Al lanzar este error simulado, evitamos que Desktop intente procesar
-        // las tablas autogeneradas corruptas de SQLDelight
+        // Dejamos el error simulado para que Desktop no intente crear tablas reales
         throw NotImplementedError("La base de datos local no es necesaria en Desktop")
     }
 }
